@@ -1,0 +1,271 @@
+import pandas as pd
+import tkinter as tk
+from tkinter import simpledialog
+# Importing Important libraries
+
+# Constants
+IRA_RMD_TABLE = {
+    75: 22.9,
+    76: 22.0,
+    77: 21.2,
+    78: 20.3,
+    79: 19.5,
+    80: 18.7,
+    81: 17.9,
+    82: 17.1,
+    83: 16.3,
+    84: 15.5,
+    85: 14.8,
+    86: 14.1,
+    87: 13.4,
+    88: 12.7,
+    89: 12.0,
+    90: 11.4,
+    91: 10.8,
+    92: 10.2,
+    93: 9.6,
+    94: 9.1,
+    95: 8.6,
+    96: 8.1,
+    97: 7.6,
+    98: 7.1,
+    99: 6.7,
+    100: 6.3,
+    101: 5.9,
+    102: 5.5,
+    103: 5.2,
+    104: 4.9,
+    105: 4.5,
+    106: 4.2,
+    107: 3.9,
+    108: 3.7,
+    109: 3.4,
+    110: 3.1,
+    111: 2.9,
+    112: 2.6,
+    113: 2.4,
+    114: 2.1,
+    115: 1.9,  # The table typically caps at age 115 with a factor of 1.9
+}  # Online found rmd table (https://smartasset.com/retirement/rmd-table)
+
+inflation_rates = {
+    2023: 0.08,
+    2024: 0.05,
+    2025: 0.03,
+    2026: 0.02,
+    2027: 0.02,
+    2028: 0.02,
+    2029: 0.02,
+    2030: 0.02,
+    2031: 0.02,
+    2032: 0.02,
+    2033: 0.02,
+    2034: 0.02,
+    2035: 0.02,
+    2036: 0.02,
+    2037: 0.02,
+    2038: 0.02,
+    2039: 0.02,
+    2040: 0.02,
+    2041: 0.02,
+    2042: 0.02,
+    2043: 0.02,
+    2044: 0.02,
+    2045: 0.02,
+    2046: 0.03,
+    2047: 0.03,
+    2048: 0.03,
+    2049: 0.03,
+    2050: 0.03,
+    2051: 0.03,
+    2052: 0.03,
+    2053: 0.03,
+    2054: 0.03,
+    2055: 0.03,
+    2056: 0.03,
+    2057: 0.03,
+    2058: 0.03,
+} #Information from the email table
+
+federal_tax_brackets = [
+    (0, 22000, 0.10),
+    (22000, 89450, 0.12),
+    (89450, 190750, 0.22),
+    (190750, 364200, 0.24),
+    (364200, 462500, 0.32),
+    (462500, 693750, 0.35),
+    (693750, float('inf'), 0.37)
+]  # Federal tax brackets # Taken from the table provided
+
+
+ca_state_tax_brackets = [
+    (0, 20198, 0.0110),
+    (20198, 47884, 0.0220),
+    (47884, 75576, 0.0440),
+    (75576, 104910, 0.0660),
+    (104910, 132590, 0.0880),
+    (132590, 677278, 0.1023),
+    (677278, 812728, 0.1133),
+    (812728, 1000000, 0.1243),
+    (1000000, 1354550, 0.1353),
+    (1354550, float('inf'), 0.1463)
+]  # California state tax brackets # Taken from the table provided
+
+ma_state_tax_rate = 0.05  # Massachusetts state tax rate
+
+# Helper Functions for Tax and RMD Calculations
+def calculate_rmd(ira_balance, age, rmd_table):
+    divisor = rmd_table.get(age, rmd_table[max(rmd_table.keys())])
+    return ira_balance / divisor if divisor else 0
+
+def calculate_federal_taxes(income, brackets):
+    taxes = 0
+    for lower_bound, upper_bound, rate in brackets:
+        if income > lower_bound:
+            taxable_income = min(income, upper_bound) - lower_bound
+            taxes += taxable_income * rate
+            if income >= upper_bound:
+                break
+    return taxes
+
+def calculate_state_taxes(income, state, ca_brackets, ma_rate):
+    if state == 'CA':
+        return calculate_taxes(income, ca_brackets)
+    elif state == 'MA':
+        return income * ma_rate
+    return 0
+
+def calculate_taxes(income, brackets):
+    taxes = 0
+    for lower_bound, upper_bound, rate in brackets:
+        if income > lower_bound:
+            taxable_income = min(income, upper_bound) - lower_bound
+            taxes += taxable_income * rate
+            if income >= upper_bound:
+                break
+    return taxes
+
+def get_user_inputs():
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
+
+    inputs = {
+        'start_age': simpledialog.askinteger("Input", "Start Age:", parent=root, minvalue=0, maxvalue=120),
+        'savings_balance': simpledialog.askfloat("Input", "Savings Balance ($):", parent=root, minvalue=0),
+        'ira_balance': simpledialog.askfloat("Input", "IRA Balance ($):", parent=root, minvalue=0),
+        'annual_spending': simpledialog.askfloat("Input", "Annual Spending ($):", parent=root, minvalue=0),
+        'savings_interest_rate': simpledialog.askfloat("Input", "Savings Interest Rate (%):", parent=root, minvalue=0) / 100,
+        'ira_interest_rate': simpledialog.askfloat("Input", "IRA Interest Rate (%):", parent=root, minvalue=0) / 100,
+        'retirement_age_ira': simpledialog.askinteger("Input", "Age to Start IRA Withdrawals:", parent=root, minvalue=0, maxvalue=120),
+        'life_expectancy': simpledialog.askinteger("Input", "Life Expectancy (age):", parent=root, minvalue=0, maxvalue=120),
+        'state': simpledialog.askstring("Input", "State (CA or MA):", parent=root),
+        'additional_income': simpledialog.askfloat("Input", "Additional Income ($):", parent=root, minvalue=0)
+    }
+
+    root.destroy()  # Destroy the root window after collecting inputs
+    return inputs
+
+def run_financial_projection(params):
+    yearly_data = []
+    
+    current_age = params['start_age']
+    savings = params['savings_balance']
+    ira = params['ira_balance']
+    state = params['state']
+    annual_spending = params['annual_spending']
+    additional_income = params['additional_income']
+
+    for age in range(current_age, params['life_expectancy'] + 1):
+        year = 2023 + (age - current_age)
+        inflation_rate = inflation_rates.get(year, inflation_rates[max(inflation_rates.keys())])
+        adjusted_spending = annual_spending * (1 + inflation_rate)
+        
+        # Add rental income to savings
+        savings += additional_income
+
+        # If savings are insufficient, withdraw from IRA
+        if savings < adjusted_spending:
+            ira_withdrawal = adjusted_spending - savings
+            ira_withdrawal = min(ira_withdrawal, ira)  # Ensure withdrawal doesn't exceed IRA balance
+            ira -= ira_withdrawal
+            savings = 0
+        else:
+            ira_withdrawal = 0
+            savings -= adjusted_spending
+
+        # Interest income
+        interest_income = savings * params['savings_interest_rate']
+        savings += interest_income
+        ira_interest = ira * params['ira_interest_rate']
+        ira += ira_interest
+
+        # RMD calculation
+        rmd = calculate_rmd(ira, age, IRA_RMD_TABLE) if age >= params['retirement_age_ira'] else 0
+        ira = max(ira - rmd, 0)
+
+        # Tax calculations
+        total_income = rmd + ira_withdrawal + interest_income
+        federal_tax = calculate_federal_taxes(total_income, federal_tax_brackets)
+        state_tax = calculate_state_taxes(total_income, state, ca_state_tax_brackets, ma_state_tax_rate)
+        total_taxes = federal_tax + state_tax
+        savings = max(savings - total_taxes, 0)
+
+        # Store the results
+        yearly_data.append({
+            "Year": year,
+            "Age": age,
+            "Initial Savings": savings,
+            "Interest Income": interest_income,
+            "Adjusted Expenses": adjusted_spending,
+            "Tax Due": total_taxes,
+            "Balance": savings,
+            "IRA Balance": ira,
+            "IRA Withdrawal": ira_withdrawal + rmd
+        })
+
+        # Update annual spending for the next year
+        annual_spending = adjusted_spending
+
+        # Check if all funds are depleted
+        if savings <= 0 and ira <= 0:
+            return pd.DataFrame(yearly_data), f"All funds depleted at age {age}."
+
+    return pd.DataFrame(yearly_data), "Funds last beyond life expectancy."
+
+# Main execution
+if __name__ == "__main__":
+    user_inputs = get_user_inputs()
+    projection_df, message = run_financial_projection(user_inputs)
+    print(projection_df)
+    print(message)
+
+
+We'll need to consider the following components for the model's calculation
+
+1. **Annual Spending Adjusted for Inflation**: This will project how spending power decreases over time due to inflation.
+2. **Savings Account Growth**: This will track the growth of the savings account based on the interest rate.
+3. **IRA Account Growth and Withdrawals**: This will track the growth of the IRA account, including the impact of Required Minimum Distributions (RMDs) starting at the specified age, and the option to withdraw more if necessary.
+4. **Tax Calculations**: We'll calculate the tax impact on withdrawals from the IRA, considering the different tax structures of California and Massachusetts.
+5. **Financial Projections**: Using the above components, we will project the longevity of the savings account and the IRA.
+
+Following are the steps we need to take to refine the model:
+
+1. **Implement RMD calculations**: RMDs must be calculated based on the IRA balance and the retiree's age. The IRS provides life expectancy tables to determine the distribution period.
+
+2. **Include detailed tax calculations**: The model currently has a placeholder for California tax brackets and a flat tax rate for Massachusetts. We need to implement the logic to apply the appropriate tax rates to the withdrawals from the IRA, considering both federal and state taxes.
+
+3. **Adjust for state-specific living costs**: If we want to include the option to compare living in California versus Massachusetts, we should account for the differences in the cost of living.
+
+4. **Incorporate real inflation rates**: Instead of a constant inflation rate, we might want to incorporate varying inflation rates based on historical data or projections.
+
+5. **User inputs or data import**: Replace dummy values with actual user inputs or import data from files for parameters like initial savings, interest rates, additional income source and tax information.
+
+6. **Output detailed year-by-year information**: Instead of just printing when funds are depleted, it would be more informative to output a year-by-year breakdown of the financial situation.
+
+
+    
+#* Code written with the prompts provided to chat gpt * 
+# links :
+#(https://chat.openai.com/c/d7f029e5-78f6-43f8-9d24-c1136d327b1c)
+#(https://chat.openai.com/c/3a8c13a1-a784-4e5f-a450-a010b20f8f6f)
+#(https://chat.openai.com/c/30173726-1e65-4b39-aa38-7d5c8940dcd3)
